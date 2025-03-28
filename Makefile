@@ -31,16 +31,23 @@
 # make filename.i = Create a preprocessed source file for use in submitting
 #                   bug reports to the GCC project.
 #
+# make generate_ppm_ticks = creates the header file ppm_ticks which defines 
+#                           servo pulse length as ticks for the counter
+#
+# Defining the variable DEMO on the command line, creates the demo 
+# application. It simply steers the servo from left to right ad vice versa:
+# make clean build DEMO=1
+#
 # To rebuild project do "make clean" then "make all".
 # ---------------------------------------------------------------------------
 
-#  avrdude -c usbtiny -p m32 -B 1 -U eeprom:w:main.eep
 
 MCU = attiny13a
 F_CPU = 9600000
 FORMAT = ihex
 TARGET = avr-ppm-extender
-SRC = src/$(TARGET).c
+SRC_DIR = src
+SRC = $(SRC_DIR)/$(TARGET).c
 ASRC =
 OPT = s
 
@@ -60,9 +67,15 @@ DEBUG = stabs
 CSTANDARD = -std=gnu99
 
 # Place -D or -U options here
-CDEFS = -DF_CPU=$(F_CPU)
-# enable these options to build the test program
-#CDEFS = -DF_CPU=$(F_CPU) -D__OUT_TEST__=1
+CDEFS_DEFAULT = -DF_CPU=$(F_CPU)
+
+# if the DEMO variable is defined on the command line, 
+# the demo application is created, e.g. make clean build DEMO=1
+ifndef DEMO
+	CDEFS = $(CDEFS_DEFAULT)
+else
+	CDEFS = $(CDEFS_DEFAULT) -D__OUT_TEST__=1
+endif
 
 # Place -I options here
 CINCS =
@@ -160,6 +173,9 @@ AVRDUDE = avrdude
 REMOVE = rm -f
 MV = mv -f
 
+# Used for generating ppm_ticks.h
+PYTHON3 = python3
+
 # Define all object files.
 OBJ = $(SRC:.c=.o) $(ASRC:.S=.o)
 
@@ -253,6 +269,19 @@ $(TARGET).elf: $(OBJ)
 	$(CC) -c $(ALL_ASFLAGS) $< -o $@
 
 
+# Generate ppm_ticks header file
+$(SRC_DIR)/ppm_ticks.h: $(SRC_DIR)/ppm_ticks_header_generator.py
+	$(PYTHON3) $< > $@
+
+# Compile target depending on ppm_ticks header file
+# Comment this line, if you do no want that ppm_ticks.h is is generated 
+# atomatically in case it is stale
+$(SRC:.c=.o): $(SRC) $(SRC_DIR)/ppm_ticks.h
+	$(CC) -c $(ALL_CFLAGS) $< -o $@
+
+# Target: generate ppm_ticks header file 
+generate_ppm_ticks: $(SRC_DIR)/ppm_ticks.h
+
 
 # Target: clean project.
 clean:
@@ -270,8 +299,6 @@ depend:
 	echo '# DO NOT DELETE THIS LINE -- make depend depends on it.' \
 		>> $(MAKEFILE); \
 	$(CC) -M -mmcu=$(MCU) $(CDEFS) $(CINCS) $(SRC) $(ASRC) >> $(MAKEFILE)
-
-generate_header_ppm_ticks:
-	python3 ./src/ppm_ticks_header_generator.py > ./src/ppm_ticks.h
+	
 
 .PHONY:	all build elf hex eep lss sym program coff extcoff clean depend
